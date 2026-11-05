@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A no-equipment dice workout. Roll, do the move, repeat.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c8102e'/%3E%3Cg fill='%23fff'%3E%3Ccircle cx='9' cy='9' r='3'/%3E%3Ccircle cx='23' cy='9' r='3'/%3E%3Ccircle cx='16' cy='16' r='3'/%3E%3Ccircle cx='9' cy='23' r='3'/%3E%3Ccircle cx='23' cy='23' r='3'/%3E%3C/g%3E%3C/svg%3E">
+<title>Roll for Reps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: gym-floor console. The die and current move on one side, the six-move board on the other.
+   Each number wears a bumper-plate color, so the die, board and progress track read as one system. */
+:root {
+  --bg: #f5f2f0; --surface: #ffffff; --fg: #191718; --muted: #625b5d; --line: #dcd5d3;
+  --action: #c8102e; --action-fg: #ffffff; --shadow: rgba(25,23,24,.22);
+  --c1: #c8102e; --p1: #ffffff; --c2: #e9c6c8; --p2: #191718; --c3: #9aab97; --p3: #191718;
+  --c4: #2f3d52; --p4: #ffffff; --c5: #ffffff; --p5: #191718; --c6: #191718; --p6: #ffffff;
+  --edge: rgba(25,23,24,.2);
+  --display: "Big Shoulders Display", Impact, "Arial Narrow", sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161415; --surface: #221f20; --fg: #f5f2f0; --muted: #aea6a8; --line: #3b3638;
+  --action: #d81f3c; --action-fg: #ffffff; --shadow: rgba(0,0,0,.6);
+  --c6: #3d393a; --edge: rgba(255,255,255,.28); color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #161415; --surface: #221f20; --fg: #f5f2f0; --muted: #aea6a8; --line: #3b3638;
+  --action: #d81f3c; --action-fg: #ffffff; --shadow: rgba(0,0,0,.6);
+  --c6: #3d393a; --edge: rgba(255,255,255,.28); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 40px;
+}
+.wrap { max-width: 980px; margin-inline: auto; display: grid; gap: 24px; }
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 24px; }
+h1 { font-family: var(--display); font-weight: 900; font-size: clamp(2.6rem, 8vw, 4rem); line-height: .95; margin: 0; text-transform: uppercase; }
+.seg { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .875rem; font-weight: 600; }
+.seg button { min-width: 44px; min-height: 40px; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 6px; font: 700 .95rem var(--body); cursor: pointer; font-variant-numeric: tabular-nums; }
+.seg button[aria-pressed="true"] { background: var(--action); color: var(--action-fg); border-color: var(--action); }
+.seg button:disabled { opacity: .4; cursor: not-allowed; }
+.main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 32px; align-items: start; }
+@media (max-width: 760px) { .main { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+.console { display: grid; gap: 16px; justify-items: center; text-align: center; }
+.stage { --d: 124px; width: 100%; height: 200px; display: grid; place-items: center; perspective: 800px; position: relative; }
+.stage::after { content: ""; position: absolute; bottom: 14px; width: 150px; height: 22px; border-radius: 50%; background: var(--shadow); filter: blur(10px); }
+.tilt { transform-style: preserve-3d; transform: rotateX(-20deg) rotateY(24deg); z-index: 1; }
+.cube { width: var(--d); height: var(--d); position: relative; transform-style: preserve-3d; transition: transform .95s cubic-bezier(.17,.84,.3,1); }
+.face { position: absolute; inset: 0; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--edge); }
+.face[data-f="1"] { transform: translateZ(calc(var(--d) / 2)); }
+.face[data-f="6"] { transform: rotateY(180deg) translateZ(calc(var(--d) / 2)); }
+.face[data-f="3"] { transform: rotateY(90deg) translateZ(calc(var(--d) / 2)); }
+.face[data-f="4"] { transform: rotateY(-90deg) translateZ(calc(var(--d) / 2)); }
+.face[data-f="2"] { transform: rotateX(90deg) translateZ(calc(var(--d) / 2)); }
+.face[data-f="5"] { transform: rotateX(-90deg) translateZ(calc(var(--d) / 2)); }
+.pips { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 13%; place-items: center; }
+.pips i { width: 76%; aspect-ratio: 1; border-radius: 50%; display: block; background: var(--pip); }
+[data-n="1"] { background: var(--c1); --pip: var(--p1); } [data-n="2"] { background: var(--c2); --pip: var(--p2); }
+[data-n="3"] { background: var(--c3); --pip: var(--p3); } [data-n="4"] { background: var(--c4); --pip: var(--p4); }
+[data-n="5"] { background: var(--c5); --pip: var(--p5); } [data-n="6"] { background: var(--c6); --pip: var(--p6); }
+.result { min-height: 6.4rem; display: grid; align-content: center; gap: 2px; width: 100%; }
+.result .count { font-size: .875rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.result .move { font-family: var(--display); font-weight: 900; font-size: clamp(2.1rem, 6vw, 2.9rem); line-height: 1.02; text-transform: uppercase; text-wrap: balance; overflow-wrap: anywhere; }
+.roll { width: 100%; min-height: 60px; border: 0; border-radius: 8px; background: var(--action); color: var(--action-fg); font: 900 1.6rem var(--display); letter-spacing: .03em; text-transform: uppercase; cursor: pointer; transition: transform .1s; }
+.roll:active { transform: translateY(2px); }
+.roll:disabled { opacity: .55; cursor: wait; }
+.track { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; width: 100%; }
+.slot { aspect-ratio: 1; border-radius: 4px; border: 1px dashed var(--line); padding: 0; }
+.slot.pips { border: 0; box-shadow: inset 0 0 0 1px var(--edge); padding: 12%; }
+.ghost { background: none; border: 0; color: var(--muted); font: 600 .875rem var(--body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; min-height: 36px; padding: 0 8px; }
+.board { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 4px; min-width: 0; }
+.board h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 1.45rem; text-transform: uppercase; }
+.hint { margin: 0 0 8px; font-size: .875rem; color: var(--muted); }
+.row { display: grid; grid-template-columns: 40px 58px minmax(0, 1fr) 62px; gap: 8px; align-items: center; padding: 7px 6px; border-radius: 6px; }
+.row.hit { background: var(--bg); }
+.chip { width: 40px; height: 40px; border-radius: 7px; box-shadow: inset 0 0 0 1px var(--edge); }
+.row input { width: 100%; min-width: 0; min-height: 40px; padding: 6px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--fg); font: 600 1rem var(--body); }
+.row input[type="number"] { text-align: center; border-color: var(--line); font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.row input::-webkit-outer-spin-button, .row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.row input[type="text"]:hover { border-color: var(--line); }
+@media (max-width: 440px) { .row { grid-template-columns: 40px 50px minmax(0, 1fr) 52px; gap: 6px; padding-inline: 2px; } .row input[type="text"] { font-size: .9375rem; padding-inline: 4px; } }
+.tally { text-align: right; font-size: .875rem; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+.tally b { display: block; color: var(--fg); font-size: 1rem; }
+.total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-top: 1px solid var(--line); margin-top: 8px; padding: 12px 6px 0; font-weight: 600; color: var(--muted); }
+.total b { font-family: var(--display); font-weight: 900; font-size: 1.9rem; line-height: 1; color: var(--fg); font-variant-numeric: tabular-nums; }
+.movehead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.spin { min-height: 40px; padding: 0 14px; border: 1px solid var(--action); border-radius: 6px; background: transparent; color: var(--fg); font: 700 .9375rem var(--body); cursor: pointer; }
+.spin:hover:not(:disabled) { background: var(--action); color: var(--action-fg); }
+.spin:disabled { opacity: .5; cursor: not-allowed; }
+.lib { margin-top: 8px; padding-inline: 6px; font-size: .9375rem; }
+.lib summary { cursor: pointer; font-weight: 600; min-height: 32px; color: var(--muted); }
+.lib ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; color: var(--muted); }
+.lib li.on { color: var(--fg); font-weight: 700; }
+.logform { width: 100%; display: grid; gap: 8px; text-align: left; border: 1px solid var(--action); border-radius: 8px; padding: 14px; background: var(--surface); }
+.logform h2 { margin: 0; font-family: var(--display); font-weight: 900; font-size: 1.5rem; text-transform: uppercase; }
+.logform label { font-size: .875rem; font-weight: 600; color: var(--muted); }
+.logrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.logrow input { flex: 1 1 150px; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: 600 1rem var(--body); }
+.logbtn { min-height: 44px; padding: 0 18px; border: 0; border-radius: 6px; background: var(--action); color: var(--action-fg); font: 700 1rem var(--body); cursor: pointer; }
+.logbtn:disabled { opacity: .55; cursor: wait; }
+.lognote { margin: 0; font-size: .875rem; color: var(--muted); }
+.logstatus { margin: 0; font-size: .9375rem; font-weight: 600; min-height: 0; }
+.leaders { gap: 10px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { min-height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); font: 600 .9375rem var(--body); cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--action); border-color: var(--action); color: var(--action-fg); }
+.lbcap { margin: 0; font-size: .875rem; color: var(--muted); }
+.lbrows { list-style: none; margin: 0; padding: 0; display: grid; }
+.lbrow { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 9px 6px; border-top: 1px solid var(--line); }
+.lbrow:first-child { border-top: 0; }
+.lbrow .rk { font-family: var(--display); font-weight: 900; font-size: 1.3rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+.lbrow:first-child .rk { color: var(--action); }
+.lbrow .who { font-weight: 600; overflow-wrap: anywhere; }
+.lbrow .val { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lbrow.mine { background: var(--bg); border-radius: 6px; }
+.lbrow .you { font-size: .8125rem; font-weight: 600; color: var(--muted); }
+.side { display: grid; gap: 16px; min-width: 0; }
+.clocks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; width: 100%; }
+.clock { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 8px 10px; display: grid; gap: 0; }
+.clock span { font-size: .8125rem; font-weight: 600; color: var(--muted); }
+.clock b { font-family: var(--display); font-weight: 900; font-size: 2.2rem; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; }
+.splits { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; display: grid; }
+.split { display: grid; grid-template-columns: 30px 24px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px; border-top: 1px solid var(--line); font-size: .9375rem; }
+.split:first-child { border-top: 0; }
+.split .no { color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
+.split .mini { width: 24px; height: 24px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--edge); padding: 12%; }
+.split .nm { overflow-wrap: anywhere; font-weight: 500; }
+.split .tm { font-weight: 700; font-variant-numeric: tabular-nums; }
+.split.live .tm::after { content: " now"; font-weight: 500; font-size: .8125rem; color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .cube, .roll { transition: none; } }
+</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Roll for Reps</h1>
+    <div class="seg" role="group" aria-label="Number of rolls">
+      <span>Rolls</span>
+      <button id="t10" type="button" data-t="10">10</button>
+      <button id="t20" type="button" data-t="20">20</button>
+      <button id="t30" type="button" data-t="30">30</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="console">
+      <div class="stage" aria-hidden="true"><div class="tilt"><div class="cube" id="cube"></div></div></div>
+      <div class="result" aria-live="polite">
+        <div class="count" id="count"></div>
+        <div class="move" id="move"></div>
+      </div>
+      <form class="logform" id="logForm" hidden>
+        <h2>Log this workout?</h2>
+        <label for="playerName">Your name on the leaderboard</label>
+        <div class="logrow">
+          <input id="playerName" type="text" maxlength="24" autocomplete="nickname" required placeholder="Name or nickname">
+          <button class="logbtn" id="logBtn" type="submit">Log it</button>
+        </div>
+        <p class="lognote" id="logNote"></p>
+        <p class="logstatus" id="logStatus" role="status"></p>
+        <button class="ghost" id="logSkip" type="button">Skip</button>
+      </form>
+      <p class="logstatus" id="logDone" role="status" hidden></p>
+      <div class="clocks">
+        <div class="clock"><span>This move</span><b id="splitTime">0:00</b></div>
+        <div class="clock"><span>Total time</span><b id="totalTime">0:00</b></div>
+      </div>
+      <button class="roll" id="roll" type="button">Roll</button>
+      <div class="track" id="track" aria-hidden="true"></div>
+      <div class="actions">
+        <button class="ghost" id="pause" type="button">Pause timer</button>
+        <button class="ghost" id="music" type="button" aria-pressed="true">Music on</button>
+        <button class="ghost" id="reset" type="button">Start over</button>
+      </div>
+    </section>
+
+    <div class="side">
+    <section class="board" aria-label="Exercises">
+      <div class="movehead"><h2>The moves</h2><button class="spin" id="spin" type="button">Spin the moves</button></div>
+      <p class="hint">Spin to deal 6 new moves onto the numbers. Your rep counts stay put. You can also tap any move to type your own.</p>
+      <div id="rows"></div>
+      <div class="total"><span>Total reps so far</span><b id="total">0</b></div>
+      <details class="lib" id="lib"><summary>All 20 moves in the roulette</summary><ul id="libList"></ul></details>
+    </section>
+    <section class="board" aria-label="Split times">
+      <h2>Splits</h2>
+      <p class="hint" id="splitHint">Each move's time appears here, newest first. The clock starts when your first roll lands.</p>
+      <ol class="splits" id="splits"></ol>
+    </section>
+    </div>
+  </div>
+  <section class="board leaders" aria-label="Leaderboard">
+    <h2>Leaderboard</h2>
+    <div class="tabs" id="lbTabs"></div>
+    <div class="tabs" id="lbRolls"></div>
+    <p class="lbcap" id="lbCap"></p>
+    <ol class="lbrows" id="lbRows"></ol>
+    <p class="lbcap" id="lbMsg" role="status">Loading the leaderboard.</p>
+    <button class="ghost" id="lbRetry" type="button" hidden>Try again</button>
+  </section>
+</div>
+
+<script>
+const KEY = 'roll-for-reps-v1';
+const SPOTS = {1:[5],2:[1,9],3:[1,5,9],4:[1,3,7,9],5:[1,3,5,7,9],6:[1,3,4,6,7,9]};
+const POSE = {1:[0,0],2:[-90,0],3:[0,-90],4:[0,90],5:[90,0],6:[0,180]};
+const DEFAULTS = [
+  {name:'Squats',reps:10},{name:'Push-ups',reps:10},{name:'Lunges per leg',reps:10},
+  {name:'Mountain climbers',reps:10},{name:'Sit-ups',reps:10},{name:'Burpees',reps:10}
+];
+const LIBRARY = ['Squats','Jump squats','Lunges per leg','Side lunges per leg','Calf raises','Glute bridges','Push-ups','Pike push-ups','Plank shoulder taps','Inchworms','Sit-ups','Bicycle crunches','Leg raises','Supermans','Mountain climbers','Burpees','Jumping jacks','High knees','Skaters','Squat thrusts'];
+let state = {moves: DEFAULTS.map(m => ({...m})), log: [], target: 20};
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY));
+  if (saved && Array.isArray(saved.moves) && saved.moves.length === 6) state = saved;
+} catch (e) {}
+// Older saves have no timer fields. A reloaded workout comes back paused.
+if (state.total === undefined) { state.log.forEach(r => { r.ms = null; }); state.total = 0; state.split = 0; state.finished = state.log.length >= state.target; }
+state.tick = null;
+if (!state.cues) state.cues = [];
+if (!Array.isArray(state.extras)) state.extras = [];
+state.voice = true;
+if (state.music === undefined) state.music = true;
+state.log.forEach(r => { if (!r.name) r.name = state.moves[r.n - 1].name; });
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+
+function pips(el, n) {
+  el.classList.add('pips');
+  el.dataset.n = n;
+  el.replaceChildren(...SPOTS[n].map(s => {
+    const i = document.createElement('i');
+    i.style.gridRow = Math.ceil(s / 3);
+    i.style.gridColumn = (s - 1) % 3 + 1;
+    return i;
+  }));
+  return el;
+}
+
+// Fair 1-6: discard byte values that would bias the remainder.
+function d6() {
+  const b = new Uint8Array(1);
+  do { crypto.getRandomValues(b); } while (b[0] >= 252);
+  return b[0] % 6 + 1;
+}
+
+for (let n = 1; n <= 6; n++) {
+  const f = document.createElement('div');
+  f.className = 'face';
+  f.dataset.f = n;
+  $('cube').append(pips(f, n));
+}
+
+$('rows').replaceChildren(...state.moves.map((m, i) => {
+  const n = i + 1, row = document.createElement('div');
+  row.className = 'row';
+  row.id = 'row' + n;
+  const chip = pips(document.createElement('div'), n);
+  chip.classList.add('chip');
+  const reps = document.createElement('input');
+  reps.type = 'number'; reps.min = 1; reps.max = 999; reps.id = 'reps' + n; reps.value = m.reps;
+  reps.setAttribute('aria-label', 'Reps for number ' + n);
+  reps.addEventListener('input', () => { const v = parseInt(reps.value, 10); if (v > 0) { m.reps = v; save(); } });
+  reps.addEventListener('blur', () => { reps.value = m.reps; });
+  const name = document.createElement('input');
+  name.type = 'text'; name.id = 'name' + n; name.value = m.name; name.maxLength = 40;
+  name.setAttribute('aria-label', 'Exercise for number ' + n);
+  name.addEventListener('input', () => { m.name = name.value; save(); render(); });
+  const tally = document.createElement('div');
+  tally.className = 'tally'; tally.id = 'tally' + n;
+  row.append(chip, reps, name, tally);
+  return row;
+}));
+
+// Voice cues are mp3 files in voice/. They were inlined as base64, which made
+// this page 1.2MB of audio the browser had to read before showing anything.
+const CLIPS = Object.fromEntries(['x1', 'x2', 'end1', 'end2', 'half', 'half20', 'start', 'burn', 'girl', 'hard', 'go', 'never', 'slow'].map(k => [k, 'voice/' + k + '.mp3']));
+const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+const HARD_MOVES = ['Burpees', 'Squat thrusts', 'Jump squats', 'Pike push-ups'];
+const voice = new Audio();
+let voiceReady = false, voiceBusy = false;
+voice.addEventListener('ended', () => { voiceBusy = false; duck(false); });
+voice.addEventListener('error', () => { voiceBusy = false; duck(false); });
+// Phones only allow sound after a tap, so the first tap primes this one player for every later cue.
+function unlockVoice() {
+  if (voiceReady) return;
+  voiceReady = true;
+  voice.src = SILENT;
+  const p = voice.play();
+  if (p) p.catch(() => {});
+  warmCues();
+  priming = true;
+  song.volume = 0;
+  song.src = SILENT;
+  const q = song.play();
+  if (q) q.catch(() => {});
+  setTimeout(() => { priming = false; }, 400);
+}
+let warmed = false;
+function warmCues() {
+  if (warmed) return;
+  warmed = true;
+  const keys = Object.keys(CLIPS);
+  (function next(i) {
+    if (i >= keys.length) return;
+    fetch(CLIPS[keys[i]], {cache: 'force-cache'}).catch(() => {}).then(() => next(i + 1));
+  })(0);
+}
+function say(key, clip) {
+  if (!state.voice || voiceBusy || state.cues.includes(key)) return false;
+  state.cues.push(key);
+  voiceBusy = true;
+  duck(true);
+  voice.src = CLIPS[clip || key];
+  const p = voice.play();
+  if (p) p.catch(() => { voiceBusy = false; });
+  save();
+  return true;
+}
+// Background music: one player working through four tracks, reshuffled each
+// workout and mixed well under the voice cues. The files are served from
+// music/ rather than inlined -- they are 20MB together.
+// Storyblocks assets: fanfare 358125096, full-workout 300472293,
+// got-it-goin-on 347073124, happy-pills 300554302.
+const TRACKS = ['fanfare', 'full-workout', 'got-it-goin-on', 'happy-pills'];
+const MUSIC_VOL = .22;  // Background level sitting under the cues.
+const DUCK_VOL = .05;   // Where it drops while a cue is talking.
+const song = new Audio();
+song.volume = 0;
+let order = [], onTrack = 0, ducked = false, fade = null, misses = 0, musicWanted = false, priming = false;
+
+function shuffled() {
+  const a = [...TRACKS], b = new Uint32Array(1);
+  for (let i = a.length - 1; i > 0; i--) {
+    crypto.getRandomValues(b);
+    const j = b[0] % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+// Volume slides instead of jumping, so ducking under a cue isn't jarring.
+// A slide to zero pauses at the end, which keeps the track's position.
+function ramp(to, ms) {
+  if (fade) clearInterval(fade);
+  const from = song.volume, steps = Math.max(1, Math.round(ms / 50));
+  let i = 0;
+  fade = setInterval(() => {
+    song.volume = Math.max(0, Math.min(1, from + (to - from) * (++i / steps)));
+    if (i >= steps) { clearInterval(fade); fade = null; if (!to) song.pause(); }
+  }, 50);
+}
+function musicPlay(i) {
+  if (!order.length) return;
+  onTrack = (i + order.length) % order.length;
+  song.src = 'music/' + order[onTrack] + '.mp3';
+  const p = song.play();
+  if (p) p.catch(() => {});
+  ramp(ducked ? DUCK_VOL : MUSIC_VOL, 900);
+}
+song.addEventListener('playing', () => { misses = 0; });
+song.addEventListener('ended', () => { if (state.music && musicWanted && !priming) musicPlay(onTrack + 1); });
+// A track that won't load shouldn't end the music, but four dead files should
+// stop it rather than spin through the list forever.
+song.addEventListener('error', () => {
+  if (!state.music || !musicWanted || priming) return;
+  if (++misses < TRACKS.length) musicPlay(onTrack + 1);
+});
+// An empty order means a fresh workout; otherwise this is a resume mid-track.
+function musicOn() {
+  if (!state.music || !musicWanted) return;
+  if (!order.length) { order = shuffled(); musicPlay(0); return; }
+  if (song.ended) { musicPlay(onTrack + 1); return; }
+  const p = song.play();
+  if (p) p.catch(() => {});
+  ramp(ducked ? DUCK_VOL : MUSIC_VOL, 700);
+}
+function musicOff(ms) { ramp(0, ms || 600); }
+// At the finish the music gets out of the way of the closing cue and confetti.
+function musicEnd() { musicWanted = false; order = []; onTrack = 0; musicOff(2500); }
+function duck(on) {
+  ducked = on;
+  if (song.paused) return;
+  if (on) ramp(DUCK_VOL, 180);
+  else if (state.music && musicWanted) ramp(MUSIC_VOL, 700);
+  else ramp(0, 1200);
+}
+
+// Two extra cues land on random rolls instead of fixed marks, so no two
+// workouts sound alike. A slot is picked once and saved, so a reload doesn't
+// re-roll it, and a slot past a shortened target is dropped and picked again.
+const EXTRAS = ['x1', 'x2'];
+function planExtras() {
+  const T = state.target, lo = Math.max(2, Math.round(T * .15)), hi = Math.max(lo, Math.round(T * .9));
+  const out = state.extras.filter(s => EXTRAS.includes(s.key) && s.at >= lo && s.at <= hi);
+  const b = new Uint32Array(1);
+  for (const k of EXTRAS) {
+    if (state.cues.includes(k) || out.some(s => s.key === k)) continue;
+    let at = lo;
+    for (let i = 0; i < 20; i++) {
+      crypto.getRandomValues(b);
+      at = lo + b[0] % (hi - lo + 1);
+      if (!out.some(s => Math.abs(s.at - at) < 2)) break;  // Keep the two apart.
+    }
+    out.push({key: k, at});
+  }
+  state.extras = out;
+  return out;
+}
+// Plays at most one cue per roll. Each cue plays once per workout, and missed ones catch up on the next roll.
+function cueForRoll() {
+  const done = state.log.length, T = state.target, name = state.log[done - 1].name;
+  if (done >= T && say('never')) return;
+  if (done === Math.ceil(T / 2)) {
+    confetti();
+    // The "10 out of 20" clip only makes sense on a 20-roll workout.
+    const b = new Uint8Array(1); crypto.getRandomValues(b);
+    say('half', T === 20 && b[0] % 2 ? 'half20' : 'half');
+    return;
+  }
+  const due = [
+    ['start', 1],
+    ['burn', Math.ceil(T * .25)],
+    ['girl', Math.ceil(T * .4)],
+    ['hard', HARD_MOVES.includes(name) ? 1 : Math.ceil(T * .65)],
+    ['go', Math.ceil(T * .75)],
+    ...planExtras().map(s => [s.key, s.at])
+  ].sort((x, y) => x[1] - y[1]);
+  for (const [key, at] of due) if (done >= at && !state.cues.includes(key)) { say(key); return; }
+}
+function confetti(big) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv = document.createElement('canvas'), W = innerWidth, H = innerHeight, r = devicePixelRatio || 1;
+  cv.width = W * r; cv.height = H * r;
+  cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:20';
+  cv.setAttribute('aria-hidden', 'true');
+  document.body.append(cv);
+  const g = cv.getContext('2d'), css = getComputedStyle(document.documentElement);
+  const colors = ['--c1', '--c2', '--c3', '--c4', '--c5'].map(v => css.getPropertyValue(v).trim());
+  g.scale(r, r);
+  const bits = Array.from({length: big ? 420 : 110}, (_, i) => {
+    const side = big ? i % 3 : 1, a = -Math.PI / 2 + (side - 1) * .55 + (Math.random() - .5) * (big ? 1.2 : 1.5), v = (big ? 11 : 7) + Math.random() * (big ? 16 : 10);
+    return {x: W * (big ? [.08, .5, .92][side] : .5), y: big ? H * .9 : H * .45, vx: Math.cos(a) * v, vy: Math.sin(a) * v, w: 5 + Math.random() * 6, h: 3 + Math.random() * 5, a: Math.random() * 6, s: (Math.random() - .5) * .4, c: colors[i % colors.length]};
+  });
+  const t0 = performance.now(), life = big ? 4200 : 2400;
+  (function frame(t) {
+    const age = t - t0;
+    g.clearRect(0, 0, W, H);
+    g.globalAlpha = Math.max(0, Math.min(1, (life - age) / 500));
+    for (const b of bits) {
+      b.vy += .28; b.vx *= .985; b.x += b.vx; b.y += b.vy; b.a += b.s;
+      g.save(); g.translate(b.x, b.y); g.rotate(b.a); g.fillStyle = b.c; g.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); g.restore();
+    }
+    if (age < life) requestAnimationFrame(frame); else cv.remove();
+  })(t0);
+}
+// Nudge once if one move has been running for 90 seconds.
+function cueIfSlow() {
+  if (state.tick === null || rolling || state.finished || !state.log.length) return;
+  if (state.split + Date.now() - state.tick >= 90000) say('slow');
+}
+let turnsX = 0, turnsY = 0, rolling = false, armed = null, spinning = false;
+function deal() {
+  const pool = [...LIBRARY], out = [], b = new Uint32Array(1);
+  while (out.length < 6) { crypto.getRandomValues(b); out.push(pool.splice(b[0] % pool.length, 1)[0]); }
+  return out;
+}
+function showNames(names) { names.forEach((nm, i) => { $('name' + (i + 1)).value = nm; }); }
+function renderLibrary() {
+  const on = state.moves.map(m => m.name);
+  $('libList').replaceChildren(...LIBRARY.map(nm => {
+    const li = document.createElement('li'); li.textContent = nm; li.classList.toggle('on', on.includes(nm)); return li;
+  }));
+}
+function advance() {
+  if (state.tick === null) return;
+  const now = Date.now(), d = now - state.tick;
+  state.total += d; state.split += d; state.tick = now;
+}
+function clock(ms) {
+  const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, r = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${r}` : `${m}:${r}`;
+}
+function paint() {
+  const extra = state.tick === null ? 0 : Date.now() - state.tick;
+  $('totalTime').textContent = clock(state.total + extra);
+  $('splitTime').textContent = clock(rolling || state.finished ? 0 : state.split + extra);
+  const live = $('liveSplit');
+  if (live) live.textContent = clock(state.split + extra);
+}
+function renderSplits() {
+  const {log, finished} = state;
+  $('splitHint').hidden = log.length > 0;
+  $('splits').replaceChildren(...log.map((r, i) => {
+    const li = document.createElement('li'), isLive = r.ms === undefined && !finished;
+    li.className = 'split' + (isLive ? ' live' : '');
+    const no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
+    const mini = pips(document.createElement('span'), r.n); mini.classList.add('mini');
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = `${r.reps} ${r.name}`;
+    const tm = document.createElement('span'); tm.className = 'tm';
+    if (isLive) tm.id = 'liveSplit';
+    tm.textContent = r.ms === null || r.ms === undefined ? (isLive ? '0:00' : '–') : clock(r.ms);
+    li.append(no, mini, nm, tm);
+    return li;
+  }).reverse());
+}
+function pose(n, spin) {
+  if (spin) { turnsX += 2; turnsY += 3; }
+  const [x, y] = POSE[n];
+  $('cube').style.transform = `rotateX(${360 * turnsX + x}deg) rotateY(${360 * turnsY + y}deg)`;
+}
+
+function render() {
+  const {log, target, moves} = state, last = log[log.length - 1], done = state.finished;
+  const total = log.reduce((s, r) => s + r.reps, 0);
+  $('count').textContent = done ? `${target} of ${target} rolls` : log.length ? `Roll ${log.length} of ${target}` : `${target} rolls to go`;
+  $('move').textContent = done ? `Done. ${total} reps in ${clock(state.total)}.` : last ? `${last.reps} ${last.name}` : 'Roll to start';
+  $('roll').textContent = done ? 'New workout' : log.length >= target ? 'Finish workout' : log.length ? 'Done, roll again' : 'Roll';
+  $('pause').hidden = !log.length || done;
+  $('pause').textContent = state.tick === null ? 'Resume timer' : 'Pause timer';
+  $('music').textContent = state.music ? 'Music on' : 'Music off';
+  $('music').setAttribute('aria-pressed', !!state.music);
+  $('total').textContent = total;
+  $('reset').hidden = !log.length || done;
+  document.querySelectorAll('.seg button').forEach(b => {
+    b.setAttribute('aria-pressed', +b.dataset.t === target);
+    b.disabled = done || +b.dataset.t < log.length;
+  });
+  const slots = [];
+  for (let i = 0; i < target; i++) {
+    const s = document.createElement('div');
+    s.className = 'slot';
+    slots.push(log[i] ? pips(s, log[i].n) : s);
+  }
+  $('track').replaceChildren(...slots);
+  renderSplits();
+  renderLibrary();
+  renderLogForm();
+  $('spin').disabled = done || spinning;
+  paint();
+  for (let n = 1; n <= 6; n++) {
+    const hits = log.filter(r => r.name === moves[n - 1].name);
+    const t = $('tally' + n);
+    t.replaceChildren();
+    const b = document.createElement('b');
+    b.textContent = hits.reduce((s, r) => s + r.reps, 0);
+    t.append(b, `${hits.length} ${hits.length === 1 ? 'roll' : 'rolls'}`);
+    $('row' + n).classList.toggle('hit', !done && !!last && last.name === moves[n - 1].name);
+  }
+}
+
+const API = '/api/leaderboard';
+const BOARDS = {
+  reps: {label: 'Most reps', cap: 'Most reps in one workout.', fmt: v => `${v} reps`},
+  quickest: {label: 'Quickest', cap: 'Fastest finish for this many rolls, at 10 or more reps per roll, with no pauses.', fmt: clock},
+  pace: {label: 'Best pace', cap: 'Fewest seconds per rep across a whole workout, with no pauses.', fmt: v => `${v.toFixed(1)} sec/rep`},
+  burpees: {label: 'Most burpees', cap: 'Most burpees in one workout. Thanks, die.', fmt: v => `${v} burpees`},
+  regulars: {label: 'Most workouts', cap: 'Most workouts logged under one name.', fmt: v => `${v} ${v === 1 ? 'workout' : 'workouts'}`}
+};
+let boards = null, lbTab = 'reps', lbRolls = 20, logging = false;
+function workoutSummary() {
+  return {
+    rolls: state.target,
+    reps: state.log.reduce((s, r) => s + r.reps, 0),
+    burpees: state.log.filter(r => r.name.trim().toLowerCase() === 'burpees').reduce((s, r) => s + r.reps, 0),
+    ms: Math.round(state.total),
+    paused: !!state.pausedEver
+  };
+}
+function renderLogForm() {
+  const show = state.finished && !state.logged && !state.skipped;
+  $('logForm').hidden = !show;
+  $('logDone').hidden = !state.logged || !state.finished;
+  $('logDone').textContent = state.logMsg || '';
+  if (!show) return;
+  if (!$('playerName').value && state.player) $('playerName').value = state.player;
+  $('logNote').textContent = state.pausedEver
+    ? 'You paused the timer, so this counts for reps and burpees but not for time.'
+    : 'Your name and workout stats will show on the leaderboard.';
+}
+function renderBoard() {
+  const tabs = Object.entries(BOARDS).map(([k, b]) => {
+    const t = document.createElement('button');
+    t.type = 'button'; t.id = 'lb-' + k; t.textContent = b.label; t.setAttribute('aria-pressed', k === lbTab);
+    t.addEventListener('click', () => { lbTab = k; renderBoard(); });
+    return t;
+  });
+  $('lbTabs').replaceChildren(...tabs);
+  $('lbRolls').hidden = lbTab !== 'quickest';
+  $('lbRolls').replaceChildren(...[10, 20, 30].map(n => {
+    const t = document.createElement('button');
+    t.type = 'button'; t.id = 'lbr-' + n; t.textContent = `${n} rolls`; t.setAttribute('aria-pressed', n === lbRolls);
+    t.addEventListener('click', () => { lbRolls = n; renderBoard(); });
+    return t;
+  }));
+  const b = BOARDS[lbTab];
+  $('lbCap').textContent = b.cap;
+  if (!boards) { $('lbRows').replaceChildren(); return; }
+  const rows = lbTab === 'quickest' ? boards.quickest[lbRolls] : boards[lbTab];
+  $('lbMsg').hidden = rows.length > 0;
+  if (!rows.length) $('lbMsg').textContent = 'No workouts here yet. Finish one and log it to take first place.';
+  const mine = state.mine || [], me = (state.player || '').toLowerCase();
+  $('lbRows').replaceChildren(...rows.map((r, i) => {
+    const li = document.createElement('li');
+    const isMine = lbTab === 'regulars' ? !!me && r.name.toLowerCase() === me : mine.includes(r.id);
+    li.className = 'lbrow' + (isMine ? ' mine' : '');
+    const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+    const who = document.createElement('span'); who.className = 'who'; who.textContent = r.name;
+    if (isMine) { const y = document.createElement('span'); y.className = 'you'; y.textContent = ' you'; who.append(y); }
+    const val = document.createElement('span'); val.className = 'val'; val.textContent = b.fmt(r.value);
+    li.append(rk, who, val);
+    return li;
+  }));
+}
+async function loadBoards() {
+  $('lbRetry').hidden = true;
+  $('lbMsg').hidden = false;
+  $('lbMsg').textContent = 'Loading the leaderboard.';
+  try {
+    const res = await fetch(API, {headers: {accept: 'application/json'}});
+    if (!res.ok) throw new Error();
+    boards = await res.json();
+  } catch (e) {
+    boards = null;
+    $('lbMsg').textContent = 'The leaderboard didn’t load. Check your connection and try again.';
+    $('lbRetry').hidden = false;
+  }
+  renderBoard();
+}
+function rankMessage(id) {
+  const spots = [['reps', boards.reps], ['pace', boards.pace], ['burpees', boards.burpees], ['quickest', boards.quickest[state.target]]];
+  for (const [k, rows] of spots) {
+    const at = rows.findIndex(r => r.id === id);
+    if (at >= 0) return `Logged. You’re #${at + 1} for ${BOARDS[k].label.toLowerCase()}${k === 'quickest' ? ` at ${state.target} rolls` : ''}.`;
+  }
+  return 'Logged. Keep going and you’ll get on the board.';
+}
+function clear() { state.log = []; state.total = 0; state.split = 0; state.tick = null; state.finished = false; state.cues = []; state.pausedEver = false; state.logged = false; state.skipped = false; state.logMsg = ''; state.extras = []; musicWanted = false; order = []; onTrack = 0; musicOff(300); save(); render(); }
+
+$('roll').addEventListener('click', () => {
+  if (rolling || spinning) return;
+  if (state.finished) { clear(); return; }
+  musicWanted = true;
+  musicOn();
+  if (state.log.length) {
+    advance();
+    state.log[state.log.length - 1].ms = state.split;
+    state.split = 0;
+    if (state.log.length >= state.target) { state.finished = true; state.tick = null; save(); render();
+      confetti(true);
+      musicEnd();
+      voiceBusy = false;
+      const b = new Uint8Array(1); crypto.getRandomValues(b);
+      say('end', b[0] % 2 ? 'end1' : 'end2');
+      return; }
+  }
+  const n = d6(), still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  rolling = true;
+  $('roll').disabled = true;
+  $('roll').textContent = 'Rolling';
+  pose(n, true);
+  setTimeout(() => {
+    state.log.push({n, reps: state.moves[n - 1].reps, name: state.moves[n - 1].name});
+    state.split = 0;
+    if (state.tick === null) state.tick = Date.now(); else advance();
+    state.split = 0;
+    save(); rolling = false; $('roll').disabled = false; render(); $('roll').focus(); cueForRoll();
+  }, still ? 0 : 950);
+});
+
+$('reset').addEventListener('click', () => {
+  if (armed) { clearTimeout(armed); armed = null; $('reset').textContent = 'Start over'; clear(); return; }
+  $('reset').textContent = 'Tap again to clear this workout';
+  armed = setTimeout(() => { armed = null; $('reset').textContent = 'Start over'; }, 3000);
+});
+
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+  state.target = +b.dataset.t; save(); render();
+}));
+
+$('pause').addEventListener('click', () => {
+  state.pausedEver = true;
+  if (state.tick === null) { state.tick = Date.now(); musicOn(); }
+  else { advance(); state.tick = null; musicOff(); }
+  save(); render();
+});
+$('spin').addEventListener('click', () => {
+  if (rolling || spinning || state.finished) return;
+  const finish = () => {
+    deal().forEach((nm, i) => { state.moves[i].name = nm; });
+    showNames(state.moves.map(m => m.name));
+    spinning = false; save(); render();
+  };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { finish(); return; }
+  spinning = true;
+  $('spin').disabled = true;
+  let flips = 0;
+  const flick = setInterval(() => {
+    showNames(deal());
+    if (++flips >= 10) { clearInterval(flick); finish(); }
+  }, 70);
+});
+addEventListener('pointerdown', unlockVoice, true);
+addEventListener('keydown', unlockVoice, true);
+$('logForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (logging) return;
+  const name = $('playerName').value.trim();
+  if (!name) { $('logStatus').textContent = 'Enter a name to log this workout.'; return; }
+  logging = true;
+  $('logBtn').disabled = true;
+  $('logStatus').textContent = 'Logging your workout.';
+  try {
+    const res = await fetch(API, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({name, ...workoutSummary()})});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { $('logStatus').textContent = data.error || 'That didn’t log. Try again.'; return; }
+    boards = data.boards;
+    state.player = name;
+    state.mine = [...(state.mine || []), data.id].slice(-50);
+    state.logged = true;
+    state.logMsg = rankMessage(data.id);
+    save(); render(); renderBoard();
+  } catch (err) {
+    $('logStatus').textContent = 'That didn’t reach the leaderboard. Check your connection and try again.';
+  } finally {
+    logging = false;
+    $('logBtn').disabled = false;
+  }
+});
+$('music').addEventListener('click', () => {
+  state.music = !state.music;
+  if (state.music) musicOn(); else musicOff(400);
+  save(); render();
+});
+$('logSkip').addEventListener('click', () => { state.skipped = true; save(); render(); });
+$('lbRetry').addEventListener('click', loadBoards);
+let beats = 0;
+setInterval(() => { paint(); cueIfSlow(); if (++beats % 20 === 0) { advance(); save(); } }, 250);
+addEventListener('pagehide', () => { advance(); save(); });
+
+const last = state.log[state.log.length - 1];
+pose(last ? last.n : 6, false);
+render();
+renderBoard();
+loadBoards();
+</script>
+</body>
+</html>
